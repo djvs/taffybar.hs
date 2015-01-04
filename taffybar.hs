@@ -8,6 +8,7 @@ import System.Taffybar.FreedesktopNotifications
 import System.Taffybar.Weather
 import System.Taffybar.Battery
 import System.Taffybar.MPRIS
+import System.Taffybar.CommandRunner
 
 import System.Taffybar.Widgets.PollingBar
 import System.Taffybar.Widgets.PollingGraph
@@ -15,6 +16,39 @@ import System.Taffybar.Widgets.PollingGraph
 import System.Information.Memory
 import System.Information.CPU
 import System.Information.Battery
+import qualified Graphics.UI.Gtk                      as Gtk
+import System.Taffybar.Widgets.PollingLabel
+
+-- util 
+import           Control.Monad
+import           System.Exit                          (ExitCode (..))
+import qualified System.IO as IO
+import qualified System.Process as P
+
+
+-- command runner sucks so i forked it...
+commandExecNew :: Double   -- ^ Polling period (in seconds).
+               -> String   -- ^ Command to execute. Should be in $PATH or an absolute path
+               -> [String] -- ^ Command argument. May be @[]@
+               -> String   -- ^ If command fails this will be displayed.
+               -> String   -- ^ Output color
+               -> String   -- ^ begin wrap
+               -> String   -- ^ end wrap
+               -> IO Gtk.Widget
+commandExecNew interval cmd args defaultOutput color f1 f2 = do
+    label  <- pollingLabelNew "" interval $ runCmd cmd args defaultOutput color f1 f2
+    Gtk.widgetShowAll label
+    return $ Gtk.toWidget label
+
+runCmd :: FilePath -> [String] -> String -> String -> String -> String-> IO String
+runCmd cmd args defaultOutput color f1 f2 = do
+  (ecode, stdout, stderr) <- P.readProcessWithExitCode cmd args ""
+  unless (null stderr) $ do
+    IO.hPutStrLn IO.stderr stderr
+  return $ wrap f1 f2 . colorize color "" $ case ecode of
+    ExitSuccess -> stdout
+    ExitFailure _ -> defaultOutput
+
 
 memCallback = do
   mi <- parseMeminfo
@@ -39,33 +73,36 @@ myPagerConfig   = PagerConfig
   , emptyWorkspace   = (\x -> "")
   , visibleWorkspace = wrap "(" ")" . escape
   , urgentWorkspace  = colorize "red" "yellow" . escape
-  , widgetSep        = "⎞༊ "
+  , widgetSep        = colorize "white" "#000022" "≽ ☯"
   }
 
-main = do
 
-  let memCfg = defaultGraphConfig { graphDataColors = [(1, 1, 0, 1)], graphLabel = Just "mem" }
-      cpuCfg = defaultGraphConfig { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ], graphLabel = Just "cpu" }
+
+
+
+main = do
+  let memCfg = defaultGraphConfig { graphDataColors = [(1, 1, 0, 1)], graphLabel = Just "m" }
+      cpuCfg = defaultGraphConfig { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ], graphLabel = Just "c" }
       batCfg = defaultBatteryConfig { barPadding     = 1
                                     , barColor       = batColor
                                     , barBorderColor = (1,1,1)
                                     }
-
-  let clock = textClockNew Nothing "<span fgcolor='orange'>%a %b %_d %H:%M</span>" 1
+      clock = textClockNew Nothing "<span fgcolor='orange' underline='double' '>%a %b %_d %H:%M:%S</span>" 1
       pager = taffyPagerNew myPagerConfig
-      note = notifyAreaNew defaultNotificationConfig
+      --note = notifyAreaNew defaultNotificationConfig
       wea = weatherNew (defaultWeatherConfig "KNYC") 10
       mpris = mprisNew
+      fsmon = commandExecNew 5 "sh" ["-c", "df -h|grep \" /$\"|awk '{printf $4\"/\"$2}'"] "?" "#FFFFFF" "<span font_weight='bold' gravity='east'>" "</span>"
+
       mem = pollingGraphNew memCfg 1 memCallback
       cpu = pollingGraphNew cpuCfg 0.5 cpuCallback
       tray = systrayNew
       bat = batteryBarNew batCfg 5
-
-  let cfg = defaultTaffybarConfig { barHeight = 25
+      cfg = defaultTaffybarConfig { barHeight = 25
                                   , barPosition = Bottom
-                                  , widgetSpacing = 8
-                                  , startWidgets = [ pager, note ]
-                                  , endWidgets = [ tray, wea, clock, bat, mem, cpu, mpris ]
+                                  , widgetSpacing = 15
+                                  , startWidgets = [ pager ]
+                                  , endWidgets = [ tray, wea, clock, fsmon, bat, mem, cpu, mpris ]
                                   }
 
 

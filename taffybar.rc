@@ -1,5 +1,5 @@
 style "default" {
-  bg[NORMAL] = "#404040"
+  bg[NORMAL] = "#303030"
   fg[NORMAL] = "#e0e0e0"
   text[NORMAL] = "#e0e0e0"
   font_name = "Ubuntu 11"
