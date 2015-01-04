@@ -1,0 +1,321 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
+
+import           Data.Bits (shiftR, (.&.))
+import           Data.Colour.RGBSpace (uncurryRGB)
+import           Data.Colour.RGBSpace.HSV (hsv)
+import           Data.Functor ((<$>))
+import           Data.IORef (IORef, newIORef, modifyIORef, readIORef, writeIORef)
+import           Data.List (find, isPrefixOf)
+import           Data.List.Split (splitOn)
+import           Data.Word (Word32)
+import           Foreign.C.String (newCString)
+import qualified Graphics.UI.Gtk as Gtk
+import qualified System.Information.Battery as B
+import           System.Information.CPU (cpuLoad)
+import           System.Information.Network (getNetInfo)
+import           System.Information.StreamInfo (getTransfer)
+import           System.Process (rawSystem)
+import           System.Process (readProcess)
+import           System.Random (getStdRandom, randomR)
+import qualified System.Taffybar as TB
+import           System.Taffybar.Battery (batteryBarNew, defaultBatteryConfig)
+import           System.Taffybar.CPUMonitor ()
+import           System.Taffybar.DiskIOMonitor (dioMonitorNew)
+import           System.Taffybar.FSMonitor (fsMonitorNew)
+import           System.Taffybar.SimpleClock (textClockNew)
+import           System.Taffybar.Systray (systrayNew)
+import qualified System.Taffybar.TaffyPager as Pg
+import qualified System.Taffybar.Weather as W
+import           System.Taffybar.Widgets.Graph ()
+import qualified System.Taffybar.Widgets.PollingBar as Bar
+import qualified System.Taffybar.Widgets.PollingGraph as Gr
+import           System.Taffybar.Widgets.PollingLabel (pollingLabelNew)
+import           Text.Printf (printf)
+import           Text.Regex.PCRE
+import           Text.Regex.PCRE.Wrap (wrapCompile)
+
+ifaceWifi = "wlp2s0"
+ifaceWired = "enp0s25"
+
+ifaces = [ifaceWifi, ifaceWired]
+
+main = do
+  --hue <- getStdRandom $ randomR (0, 179)
+  --hueRef <- newIORef $ hue * 2
+  netRef <- newIORef []
+  bcOpt <- B.batteryContextNew
+  TB.defaultTaffybar TB.defaultTaffybarConfig {
+    TB.barHeight     = 24,
+    TB.widgetSpacing = 4,
+    TB.startWidgets  = [ pager
+                       --, labelNew freqSlow $ rootColor hueRef
+                       ] ,
+    TB.endWidgets    = [ space 2
+                       , clock
+                       , space 2
+                       , cpu
+                       , netGraph netRef
+                       , space 1
+                       , labelNew freqMed $ battState bcOpt
+                       , battBar bcOpt
+                       , space 1
+                       , labelNew freqSlow $ wifiName ifaceWifi
+                       , wifiStrength ifaceWifi
+                       , space 2
+                       , systrayNew
+                       , space 2
+                       , weather
+                       ]
+    }
+
+sep = " | "
+
+freqFast =  1
+freqMed  = 10
+freqSlow = 30
+
+
+
+labelNew' :: String -> Double -> IO String -> IO Gtk.Widget
+labelNew' initial interval action = do
+  lab <- pollingLabelNew initial interval action
+  Gtk.widgetShowAll lab
+  return lab
+
+labelNew = labelNew' ""
+
+space :: Int -> IO Gtk.Widget
+space k = labelNew' s 10000 $ return s
+  where s = replicate k ' '
+
+battState :: Maybe B.BatteryContext -> IO String
+battState Nothing = return "!upower"
+battState (Just bc) = do
+  bi <- B.getBatteryInfo bc
+  let ud = battUpDown $ B.batteryState bi
+      pct = printf "%.0f%%" $ B.batteryPercentage bi
+  return $ ud ++ pct
+
+battUpDown B.BatteryStateCharging         = "↑"
+battUpDown B.BatteryStateDischarging      = "↓"
+battUpDown B.BatteryStateEmpty            = ""
+battUpDown B.BatteryStateFullyCharged     = ""
+battUpDown B.BatteryStatePendingCharge    = "↑"
+battUpDown B.BatteryStatePendingDischarge = "↓"
+battUpDown B.BatteryStateUnknown          = "?"
+
+battPercent :: Maybe B.BatteryContext -> IO Double
+battPercent Nothing = return 0
+battPercent (Just bc) = do
+  bi <- B.getBatteryInfo bc
+  return $ B.batteryPercentage bi / 100
+
+battBar = Bar.pollingBarNew cfg freqMed . battPercent
+  where cfg = (Bar.defaultBarConfig redGreen) {
+          Bar.barWidth = 14
+          }
+
+weather = W.weatherNew cfg 5
+  where cfg = (W.defaultWeatherConfig "KJFK") {
+          W.weatherTemplate = "$skyCondition$ $tempF$°F"
+          }
+
+wifiName :: String -> IO String
+wifiName iface = do
+  buf <- readProcess "iwgetid" ["-r", iface] ""
+  return $ case init buf of
+    "" -> "off"
+    s | length s > 10 -> take 10 s ++ "…"
+    s -> s
+
+wifiQuality :: String -> IO Double
+wifiQuality iface = do
+  buf <- lines <$> readFile "/proc/net/wireless"
+  return $ case find (isPrefixOf iface) buf of
+    Nothing -> 0
+    Just dat -> (read $ init $ words dat !! 2) / 70
+
+wifiStrength :: String -> IO Gtk.Widget
+wifiStrength = Bar.pollingBarNew cfg freqMed . wifiQuality
+  where k = colorBySat hue_deep_sky 0.9
+        cfg = (Bar.defaultBarConfig k) {
+          Bar.barWidth = 10
+          }
+
+pager = Pg.taffyPagerNew cfg
+  where cfg = Pg.defaultPagerConfig {
+          Pg.emptyWorkspace   = fgcolor silver     . spaces,
+          Pg.hiddenWorkspace  = fgcolor martinique . spaces,
+          Pg.activeWorkspace  = fgcolor forest     . surround "[" "]",
+          Pg.visibleWorkspace = fgcolor governor   . surround "(" ")",
+          Pg.urgentWorkspace  = fgcolor milano_red . surround "¡" "!",
+          Pg.activeLayout     = fgcolor brandy_punch,
+          Pg.widgetSep = replicate 2 ' '
+          }
+
+clock = textClockNew Nothing "<b>%a %_d</b> %b %_H:%M" freqMed
+
+batt = batteryBarNew cfg 30
+  where cfg = defaultBatteryConfig {
+          Bar.barColor = redGreen
+          }
+
+myGraph :: Bool -> String -> [(Color, Double)] -> Gr.GraphConfig
+myGraph wide label colors = Gr.defaultGraphConfig {
+  Gr.graphWidth = if wide then 40 else 25,
+  Gr.graphLabel = if null label then Nothing else Just label,
+  Gr.graphDirection = Gr.RIGHT_TO_LEFT,
+  Gr.graphDataColors = map (\(c,d) -> dquad d c) colors,
+  Gr.graphPadding = 2
+  }
+
+cpu = Gr.pollingGraphNew cfg freqFast (f <$> cpuLoad)
+  where f (_, sys, tot) = [tot]
+        cfg = myGraph True "" [(mango,1)]
+
+diskIO = dioMonitorNew cfg freqFast "sda"
+  where cfg = myGraph True "ssd" [(green,1), (magenta,0.5)]
+
+--wifi = Gr.pollingGraphNew cfg freqMed $ get
+--  where get = getTransfer 1 $ getNetInfo "wlp2s0"
+--        cfg = myGraph False "wl" [(red,1), (magenta,0.5)]
+
+wired = Gr.pollingGraphNew cfg freqMed $ get
+  where get = getTransfer 1 $ getNetInfo "enp0s25"
+        cfg = myGraph False "en" [(red,1), (magenta,0.5)]
+
+-- Produces text: [/ 76%] [/home 89%] [/var 50%]
+diskUse = fsMonitorNew 300 ["/", "/home", "/var"]
+
+
+
+-- Colors that vary across a range
+
+colorByHue lo hi sat val d = uncurryRGB (,,) rgb
+  where rgb = hsv (d * range + lo) sat val
+        range = hi - lo
+
+colorBySat :: Double -> Double -> Double -> Color3
+colorBySat hue val d = uncurryRGB (,,) $ hsv hue d val
+
+colorByVal hue sat = uncurryRGB (,,) . hsv hue sat
+
+redGreen = colorByHue hue_torch_red hue_green 0.8 0.8
+
+
+
+-- Just for testing color ranges
+
+ud r = Bar.pollingBarNew cfg 0.1 $ trackUpDown r
+  where cfg = Bar.defaultBarConfig $ colorBySat hue_magenta 0.9
+
+delta = 0.05
+
+upDown (d, True)  = if d >= 0.95 then (d - delta, False) else (d + delta, True)
+upDown (d, False) = if d <= 0.05 then (d + delta, True)  else (d - delta, False)
+
+trackUpDown :: IORef (Double, Bool) -> IO Double
+trackUpDown ref = do
+  modifyIORef ref upDown
+  fst <$> readIORef ref
+
+
+
+-- Represent colors using a single Word32 (including alpha in last 8 bits),
+-- and then convert to different forms.
+type Color = Word32
+type Color3 = (Double, Double, Double)
+type Color4 = (Double, Double, Double, Double)
+
+hex :: Color -> String
+hex = printf "#%06x"
+
+d8 :: Color -> Double
+dtrip :: Color -> Color3
+dquad :: Double -> Color -> Color4
+
+d8 x = fromIntegral (x .&. 0xff) / 255
+
+dtrip c = (d8 r, d8 g, d8 c)
+  where r = c `shiftR` 16
+        g = c `shiftR` 8
+
+dquad a c = (r, g, b, a)
+  where (r, g, b) = dtrip c
+
+
+
+-- Color names from <http://chir.ag/projects/name-that-color/>
+-- and <http://www.color-blindness.com/color-name-hue/>
+
+brandy_punch = 0xCD8429         -- yellow
+christi = 0x67A712              -- green
+forest = 0x228B22               -- green
+governor = 0x2F3CB3             -- blue
+green = 0x00FF00                -- green
+lima = 0x76BD17                 -- green
+magenta = 0xFF00FF              -- violet
+mango = 0xE77200                -- orange
+martinique = 0x363050           -- violet
+milano_red = 0xB81104           -- red
+red = 0xFF0000                  -- red
+silver = 0xC0C0C0               -- grey
+
+hue_deep_sky = 200              -- blue
+hue_electric_indigo = 272       -- violet
+hue_green = 120                 -- green
+hue_harlequin = 106             -- green
+hue_magenta = 300               -- violet
+hue_torch_red = -12             -- red, (==348)
+hue_yellow = 60                 -- yellow
+
+
+
+-- Markup helpers
+
+surround :: String -> String -> String -> String
+surround b e s = b ++ s ++ e
+
+surround1 :: String -> String -> String
+surround1 be s = be ++ s ++ be
+
+spaces :: String -> String
+spaces = surround1 " "
+
+bold :: String -> String
+bold = surround "<b>" "</b>"
+
+fgcolor :: Color -> String -> String
+fgcolor c = surround ("<span fgcolor='" ++ hex c ++ "'>") "</span>"
+
+
+
+rootColor :: IORef Int -> IO String
+rootColor hueRef = do
+  hue <- readIORef hueRef
+  let f :: Double -> Int
+      f d = round (255 * d)
+      hex r g b = printf "#%02x%02x%02x" (f r) (f g) (f b)
+      color = uncurryRGB hex $ hsv (fromIntegral hue) 0.4 0.3
+  rawSystem "xsetroot" ["-bitmap", "/usr/include/X11/bitmaps/cross_weave",
+                        "-bg", color]
+  writeIORef hueRef $ (hue + 2) `mod` 360
+  return "" --color
+
+
+
+netStats :: IORef [Integer] -> IO [Double]
+netStats ref = do
+  prev <- readIORef ref
+  curr <- concat `fmap` mapM getNetInfo ifaces
+  let diffs = zipWith (-) curr prev
+  writeIORef ref curr
+  return $ map fromIntegral diffs
+
+netGraph :: IORef [Integer] -> IO Gtk.Widget
+netGraph = Gr.pollingGraphNew cfg freqFast . netStats
+  where cfg = myGraph True "" [
+          (governor, 1), (forest, 0.7),
+          (milano_red, 1), (martinique, 0.7)
+          ]
