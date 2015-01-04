@@ -87,7 +87,7 @@ main = do
                                     , barColor       = batColor
                                     , barBorderColor = (1,1,1)
                                     }
-      clock = textClockNew Nothing "<span fgcolor='orange' underline='double' '>%a %b %_d %H:%M:%S</span>" 1
+      clock = textClockNew Nothing "<span fgcolor='orange' underline='double'>%a %b %_d %H:%M:%S</span>" 1
       pager = taffyPagerNew myPagerConfig
       --note = notifyAreaNew defaultNotificationConfig
       wea = weatherNew (defaultWeatherConfig "KNYC") 10
