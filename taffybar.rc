@@ -1,8 +1,13 @@
 style "default" {
-  bg[NORMAL] = "#303030"
+  bg[NORMAL] = "#747474"
   fg[NORMAL] = "#e0e0e0"
   text[NORMAL] = "#e0e0e0"
   font_name = "Ubuntu 11"
+  # font_name = "Futura Bk BT 12"
+  # font_name = "Legacy Sans OS ITC TT 12"
+  # font_name = "Liberation Sans Narrow 12"
+  # font_name = "Liberation Sans 12"
+  # font_name = "Meera 12"
 }
 
 style "notification-button" = "default" {

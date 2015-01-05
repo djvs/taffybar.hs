@@ -66,14 +66,14 @@ batColor p = if p < 1 then (r, g, 0) else (0.7, 0.7, 0.7)
 myPagerConfig :: PagerConfig
 myPagerConfig   = PagerConfig
   { activeWindow     = colorize "black" "#C0C0C0" . escape . shorten 100 . wrap " " " "
-  , activeLayout     = colorize "white" "" . wrap "  " "  " . escape
+  , activeLayout     = colorize "black" "#909090" . wrap "  " "  " . escape
   , activeWorkspace  = colorize "orange" "black" . wrap " (" ") " . escape
   , hiddenWorkspace  = colorize "#004400" "#B0B0B0" . wrap "  " "  " . escape
   --, emptyWorkspace  = escape
   , emptyWorkspace   = (\x -> "")
   , visibleWorkspace = wrap "(" ")" . escape
   , urgentWorkspace  = colorize "red" "yellow" . escape
-  , widgetSep        = colorize "white" "#000022" "≽ ☯"
+  , widgetSep        = colorize "white" "#000022" "࿑ ̱ ̲ ̳ ̴ ̵ ̶ ̷ ̸"
   }
 
 
@@ -81,18 +81,18 @@ myPagerConfig   = PagerConfig
 
 
 main = do
-  let memCfg = defaultGraphConfig { graphDataColors = [(1, 1, 0, 1)], graphLabel = Just "m" }
+  let memCfg = defaultGraphConfig { graphDataColors = [(0, 0, 1, 1)], graphLabel = Just "m" }
       cpuCfg = defaultGraphConfig { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ], graphLabel = Just "c" }
       batCfg = defaultBatteryConfig { barPadding     = 1
                                     , barColor       = batColor
                                     , barBorderColor = (1,1,1)
                                     }
-      clock = textClockNew Nothing "<span fgcolor='orange' underline='double'>%a %b %_d %H:%M:%S</span>" 1
+      clock = textClockNew Nothing "<span bgcolor='#333333' fgcolor='white' font='12'> %a, %b %_d %H:%M:%S   </span>" 1
       pager = taffyPagerNew myPagerConfig
       --note = notifyAreaNew defaultNotificationConfig
       wea = weatherNew (defaultWeatherConfig "KNYC") 10
       mpris = mprisNew
-      fsmon = commandExecNew 5 "sh" ["-c", "df -h|grep \" /$\"|awk '{printf $4\"/\"$2}'"] "?" "#FFFFFF" "<span font_weight='bold' gravity='east'>" "</span>"
+      fsmon = commandExecNew 5 "sh" ["-c", "df -h|grep \" /$\"|awk '{printf $4\"/\"$2}'"] "?" "#FFFFFF" "<span gravity='east'>" "</span>"
 
       mem = pollingGraphNew memCfg 1 memCallback
       cpu = pollingGraphNew cpuCfg 0.5 cpuCallback
@@ -100,9 +100,9 @@ main = do
       bat = batteryBarNew batCfg 5
       cfg = defaultTaffybarConfig { barHeight = 25
                                   , barPosition = Bottom
-                                  , widgetSpacing = 15
-                                  , startWidgets = [ pager ]
-                                  , endWidgets = [ tray, wea, clock, fsmon, bat, mem, cpu, mpris ]
+                                  , widgetSpacing = 8
+                                  , startWidgets = [ clock, pager ]
+                                  , endWidgets = [ tray, wea, fsmon, bat, mem, cpu, mpris ]
                                   }
 
 
