@@ -92,7 +92,27 @@ main = do
       clock = textClockNew Nothing "<span bgcolor='#333333' fgcolor='white' font='12'> %a, %b %_d %H:%M:%S   </span>" 1
       pager = taffyPagerNew myPagerConfig
       --note = notifyAreaNew defaultNotificationConfig
-      wea = weatherNew (defaultWeatherConfig "KNYC") 10
+ 
+--    tpl' = setManyAttrib [ ("stationPlace", stationPlace wi)
+--                         , ("stationState", stationState wi)
+--                         , ("year", year wi)
+--                         , ("month", month wi)
+--                         , ("day", day wi)
+--                         , ("hour", hour wi)
+--                         , ("wind", wind wi)
+--                         , ("visibility", visibility wi)
+--                         , ("skyCondition", skyCondition wi)
+--                         , ("tempC", show (tempC wi))
+--                         , ("tempF", show (tempF wi))
+--                         , ("dewPoint", dewPoint wi)
+--                         , ("humidity", show (humidity wi))
+--                         , ("pressure", show (pressure wi))
+--                         ] tpl
+      wcfg = (defaultWeatherConfig "KNYC") { weatherTemplate = colorize "white" "#303030" "   $skyCondition$, $tempF$ °F   " } 
+      wea = weatherNew wcfg 10
+      --wea = weatherNew (WeatherConfig { weatherStation = "KNYC"
+      --                                , weatherTemplate = "$tempF$ °F"
+      --                                }) 10
       mpris = mprisNew
       fsmon = commandExecNew 5 "sh" ["-c", "df -h|grep \" /$\"|awk '{printf $4\"/\"$2}'"] "?" "#FFFFFF" "<span gravity='east'>" "</span>"
 
