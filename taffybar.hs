@@ -65,15 +65,17 @@ batColor p = if p < 1 then (r, g, 0) else (0.7, 0.7, 0.7)
 
 myPagerConfig :: PagerConfig
 myPagerConfig   = PagerConfig
-  { activeWindow     = colorize "black" "#C0C0C0" . escape . shorten 100 . wrap " " " "
-  , activeLayout     = colorize "black" "#909090" . wrap "  " "  " . escape
-  , activeWorkspace  = colorize "orange" "black" . wrap " (" ") " . escape
+  -- these are big and optimized for my huge 1920x1080 layout.  shrink font in .rc and reduce spaces in wrapping for smaller resolution
+  { activeWindow     = colorize "black" "#C0C0C0" . escape . shorten 100 . wrap "   " "   "
+  , activeLayout     = colorize "black" "#909090" . wrap "   " "   " . escape
+  , activeWorkspace  = colorize "orange" "black" . wrap "  (" ")  " . escape
   , hiddenWorkspace  = colorize "#004400" "#B0B0B0" . wrap "  " "  " . escape
   --, emptyWorkspace  = escape
   , emptyWorkspace   = (\x -> "")
   , visibleWorkspace = wrap "(" ")" . escape
   , urgentWorkspace  = colorize "red" "yellow" . escape
-  , widgetSep        = colorize "white" "#000022" "࿑ ̱ ̲ ̳ ̴ ̵ ̶ ̷ ̸"
+  , widgetSep        = colorize "white" "#000022" "࿑ ̵"
+  --, widgetSep        = colorize "white" "#000022" "࿑ ̱ ̲ ̳ ̴ ̵ ̶ ̷ ̸"
   }
 
 
@@ -81,8 +83,8 @@ myPagerConfig   = PagerConfig
 
 
 main = do
-  let memCfg = defaultGraphConfig { graphDataColors = [(0, 0, 1, 1)], graphLabel = Just "m" }
-      cpuCfg = defaultGraphConfig { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ], graphLabel = Just "c" }
+  let memCfg = defaultGraphConfig { graphDataColors = [(1, 0.85, 0, 1)], graphLabel = Just "m", graphBorderColor=(1,1,1)}
+      cpuCfg = defaultGraphConfig { graphDataColors = [ (0, 1, 0, 1), (1, 0, 1, 0.5) ], graphLabel = Just "c", graphBorderColor=(1,1,1)}
       batCfg = defaultBatteryConfig { barPadding     = 1
                                     , barColor       = batColor
                                     , barBorderColor = (1,1,1)
@@ -99,7 +101,7 @@ main = do
       tray = systrayNew
       bat = batteryBarNew batCfg 5
       cfg = defaultTaffybarConfig { barHeight = 25
-                                  , barPosition = Bottom
+                                  , barPosition = Top
                                   , widgetSpacing = 8
                                   , startWidgets = [ clock, pager ]
                                   , endWidgets = [ tray, wea, fsmon, bat, mem, cpu, mpris ]
